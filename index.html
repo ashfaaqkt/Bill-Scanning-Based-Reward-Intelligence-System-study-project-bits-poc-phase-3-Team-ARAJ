@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill Scanning Based Reward &amp; Intelligence System PoC</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- Header Section -->
+    <header class="navbar">
+        <div class="container header-container">
+            <div class="logo-area">
+                <img src="assets/BITS_Pilani-Logo.svg" alt="BITS Pilani Digital Logo" class="logo">
+            </div>
+            <div class="title-area">
+                <h1>Bill Scanning Reward System</h1>
+                <div class="team-credit">Developed by Team ARAJ</div>
+                <span class="badge">Phase 3 PoC</span>
+            </div>
+            <div style="flex-grow: 1;"></div>
+            <div class="secondary-logo-area">
+                <img src="assets/logo.svg" alt="App Logo" class="secondary-logo"
+                    style="height: 40px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));">
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Dashboard Section -->
+        <section class="dashboard card">
+            <h2>Your Reward Balance</h2>
+            <div class="balance-display">
+                <span id="total-points" class="points-value">0</span>
+                <span class="points-label">Points</span>
+            </div>
+            <p class="subtitle">Scan bills to earn points globally!</p>
+        </section>
+
+        <!-- About & Limitations Section -->
+        <section class="about card">
+            <h2>About This PoC</h2>
+            <p>This is a Proof of Concept simulation for the BITS Pilani final-year project powered by Gemini AI. It
+                validates the UI flow and real ML/Reward concepts with a live backend.</p>
+            <div class="limitations-alert">
+                <strong>Current Limitations:</strong>
+                <ul>
+                    <li>Fraud detection is simplified.</li>
+                    <li>Full user segmentation is not yet implemented.</li>
+                    <li>DSP export is simulated.</li>
+                    <li>OCR is powered by Google Gemini AI.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Demo Workspace (The Interactive PoC) -->
+        <section class="demo-workspace card">
+            <h2>PoC Demo Workspace</h2>
+
+            <div class="stepper">
+                <div class="step active" id="step-upload">1. Upload</div>
+                <div class="step" id="step-extract">2. Extract</div>
+                <div class="step" id="step-process">3. Process</div>
+                <div class="step" id="step-reward">4. Reward</div>
+            </div>
+
+            <!-- Stage 1: Upload -->
+            <div id="stage-upload" class="stage-content active">
+                <div class="upload-area" id="drop-zone">
+                    <div class="upload-icon">📄</div>
+                    <h3>Upload Receipt Image</h3>
+                    <p>Drag &amp; drop your bill here or click to browse</p>
+                    <input type="file" id="file-input" accept="image/*" hidden>
+                    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Select
+                        File</button>
+                </div>
+            </div>
+
+            <!-- Stage 2: Extracting (Gemini OCR) -->
+            <div id="stage-extracting" class="stage-content hidden">
+                <div class="processing-view">
+                    <div class="spinner"></div>
+                    <h3>AI OCR Extraction...</h3>
+                    <p>Gemini is analyzing your receipt and extracting data.</p>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="ocr-progress"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 3/4: Process & Reward Results -->
+            <div id="stage-results" class="stage-content hidden">
+                <div class="results-grid">
+                    <div class="result-box data-box">
+                        <h3>Extracted Bill Data</h3>
+                        <div class="data-row"><span>Raw Merchant:</span> <strong id="val-raw-merchant">--</strong></div>
+                        <div class="data-row"><span>Date:</span> <strong id="val-date">--</strong></div>
+                        <div class="data-row"><span>Total Amount (₹):</span> <strong id="val-total">--</strong></div>
+                        <div class="items-list" id="val-items">
+                            <!-- Items injected via JS -->
+                        </div>
+                    </div>
+
+                    <div class="result-box intel-box">
+                        <h3>Intelligence Processing &amp; Rewards</h3>
+                        <div class="data-row"><span>Normalized Category:</span> <span class="tag"
+                                id="val-category">--</span></div>
+                        <div class="reward-calculation">
+                            <h4>Reward Earned!</h4>
+                            <div class="earned-points-display">
+                                +<span id="val-earned-points">0</span> Points
+                            </div>
+                            <p class="reward-logic" id="val-reward-logic">--</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-footer">
+                    <button class="btn btn-secondary" id="btn-reset">Scan Another Bill</button>
+                    <button class="btn btn-primary" id="btn-add-balance">Add to Balance</button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- History Section (Hidden by default) -->
+        <section class="history-section card" id="section-history" style="display: none;">
+            <div class="history-header">
+                <div class="history-controls">
+                    <h2 class="history-title">Scan History</h2>
+                    <input type="text" id="history-search" class="history-search-input"
+                        placeholder="Search by merchant, date...">
+                    <select id="history-category-filter" class="history-select">
+                        <option value="all">All Categories</option>
+                        <option value="supermarket / grocery">Supermarket / Grocery</option>
+                        <option value="food & beverage">Food & Beverage</option>
+                        <option value="general retail">General Retail</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-close-history">Close</button>
+            </div>
+            <div class="table-responsive" style="overflow-x: auto;">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Merchant</th>
+                            <th>Category</th>
+                            <th>Total (₹)</th>
+                            <th style="text-align: right;">Points</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+                <div id="history-loading"
+                    style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
+                    Loading history...
+                </div>
+                <div id="history-empty"
+                    style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
+                    No bills scanned yet.
+                </div>
+            </div>
+        </section>
+
+        <div class="view-history-wrapper">
+            <button class="btn btn-secondary" id="btn-view-history">⟳ View Scan History</button>
+        </div>
+
+    </main>
+
+    <!-- Team Footer -->
+    <footer class="footer">
+        <div class="container footer-content">
+            <div class="team-info">
+                <h3>Team ARAJ (Group 120)</h3>
+                <p>BITS Pilani Digital, B.Sc. Computer Science</p>
+                <div class="members">
+                    <span>Ashfaaq Feroz Muhammad</span> |
+                    <span>Ranjeet Singh</span> |
+                    <span>Arpan Chatterjee</span> |
+                    <span>Jyoti Kataria</span>
+                </div>
+            </div>
+            <div class="advisor-info">
+                <strong>Advisor:</strong> Prof. Uma Sankara Rao
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
