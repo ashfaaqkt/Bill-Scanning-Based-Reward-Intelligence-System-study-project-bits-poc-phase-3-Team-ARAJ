@@ -1,5 +1,25 @@
+# Modules
 node_modules/
+
+# Secrets / API keys
 .env
-.DS_Store
+serviceAccountKey.json
+*.key
+*.pem
+
+# Databases
 database.sqlite
-pdfs
+*.db
+
+# OS Files
+.DS_Store
+
+# Instructions
+MANUAL_SETUP.txt
+
+# Temporary / Uploads
+uploads/
+tmp/
+temp/
+*.tmp
+*.ocr

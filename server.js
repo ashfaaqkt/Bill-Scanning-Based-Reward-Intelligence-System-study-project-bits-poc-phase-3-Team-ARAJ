@@ -1,171 +1,292 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
 const { GoogleGenAI } = require('@google/genai');
-const sqlite3 = require('sqlite3').verbose();
+const admin = require('firebase-admin');
+const crypto = require('crypto');
 
+// 1. Authenticate to the Live Firebase Console using the Service Account logic
+try {
+    const serviceAccount = require('./serviceAccountKey.json');
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    console.log("✅ Authenticated securely with Live Firebase Firestore!");
+} catch (error) {
+    console.error("❌ Failed to authenticate with Firebase. Ensure serviceAccountKey.json exists in root.");
+}
+
+const db = admin.firestore();
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
-// Serve static files from the current directory
-app.use(express.static(__dirname));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static('public'));
 
-// Initialize Gen AI SDK
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_bits_pilani_123';
 
-// Setup Multer for in-memory uploads
-const upload = multer({ storage: multer.memoryStorage() });
+// Auth Middleware
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Access denied.' });
 
-// --- Database Setup ---
-const db = new sqlite3.Database('./database.sqlite');
-
-db.serialize(() => {
-    // Create Users table (for tracking global points)
-    db.run(`CREATE TABLE IF NOT EXISTS Users (
-        id INTEGER PRIMARY KEY,
-        total_points INTEGER DEFAULT 0
-    )`);
-
-    // Create Receipts table
-    db.run(`CREATE TABLE IF NOT EXISTS Receipts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        merchant TEXT,
-        date TEXT,
-        total REAL,
-        category TEXT,
-        points_earned INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES Users(id)
-    )`);
-
-    // Ensure we have at least one dummy user for this PoC
-    db.get('SELECT id FROM Users WHERE id = 1', (err, row) => {
-        if (!row) {
-            db.run('INSERT INTO Users (id, total_points) VALUES (1, 0)');
-        }
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Invalid token. Please log in again.' });
+        req.userId = user.userId;
+        next();
     });
-});
+}
 
-// --- Logic Helpers ---
-function calculateRewards(totalAmount, category) {
+// Logic Helper - Validates Reward Engine (FR Requirement)
+function calculateRewards(totalAmount, category, isStreak = false, tier = "Standard") {
     let points = 0;
     let logicText = "";
 
-    // Base logic: 1 point per ₹100 spent
     const basePoints = Math.floor(totalAmount / 100);
     points += basePoints;
     logicText += `Base: ${basePoints} pts (₹100 = 1pt). `;
 
-    // Multiplier logic based on category
-    if (category === 'Supermarket / Grocery') {
-        points += 5; // Flat bonus for groceries
-        logicText += `Bonus: +5 pts (Grocery Tier).`;
-    } else if (category === 'Food & Beverage') {
-        points = Math.floor(points * 1.5); // 1.5x multiplier
-        logicText += `Multiplier: 1.5x (F&B Promotion).`;
+    let multiplier = 1.0;
+    if (category === 'Supermarket / Grocery') multiplier += 0.2;
+    else if (category === 'Food & Beverage') multiplier += 0.5;
+
+    if (tier === 'Premium') multiplier += 0.5;
+    if (isStreak) {
+        multiplier += 0.3;
+        logicText += `Streak Bonus! `;
+    }
+
+    if (multiplier > 1.0) {
+        points = Math.floor(points * multiplier);
+        logicText += `Multiplier: ${multiplier.toFixed(1)}x applied. `;
     }
 
     if (points === 0 && totalAmount > 0) points = 1;
     return { points, logicText };
 }
 
-// --- API Endpoints ---
+// Ensure user node exists physically in Firestore
+async function ensureUserExists(userId) {
+    if (!userId) throw new Error("userId missing in ensureUserExists");
+    const userRef = db.collection('Users').doc(userId);
+    const doc = await userRef.get();
+    if (!doc.exists) {
+        await userRef.set({
+            total_points: 0,
+            tier: 'Standard',
+            streak: true,
+            created_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+    }
+    return userRef;
+}
 
-// Get user info (points balance)
-app.get('/api/user', (req, res) => {
-    db.get('SELECT total_points FROM Users WHERE id = 1', (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ totalPoints: row ? row.total_points : 0 });
-    });
-});
+// --- APIs ---
 
-// Get user receipt history
-app.get('/api/history', (req, res) => {
-    db.all('SELECT * FROM Receipts WHERE user_id = 1 ORDER BY created_at DESC', (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ history: rows || [] });
-    });
-});
-
-// Process uploaded receipt
-app.post('/api/upload', upload.single('receipt'), async (req, res) => {
+app.post('/api/signup', async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded.' });
+        const { email, password, name } = req.body;
+        if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+        const usersSnapshot = await db.collection('Users').where('email', '==', email).limit(1).get();
+        if (!usersSnapshot.empty) return res.status(409).json({ error: 'Email already exists.' });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newUserRef = db.collection('Users').doc();
+
+        await newUserRef.set({
+            email,
+            password: hashedPassword,
+            name: name || 'User',
+            total_points: 0,
+            tier: 'Standard',
+            streak: false,
+            created_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        const token = jwt.sign({ userId: newUserRef.id }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, name: name || 'User' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const usersSnapshot = await db.collection('Users').where('email', '==', email).limit(1).get();
+
+        if (usersSnapshot.empty) return res.status(401).json({ error: 'Invalid email or password.' });
+
+        const userDoc = usersSnapshot.docs[0];
+        const userData = userDoc.data();
+
+        const match = await bcrypt.compare(password, userData.password);
+        if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
+
+        const token = jwt.sign({ userId: userDoc.id }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, name: userData.name });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/user', authenticateToken, async (req, res) => {
+    try {
+        const userRef = await ensureUserExists(req.userId);
+        const doc = await userRef.get();
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.json({ totalPoints: doc.data().total_points || 0, name: doc.data().name || 'User' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/history', authenticateToken, async (req, res) => {
+    try {
+        const snapshot = await db.collection('Receipts')
+            .where('user_id', '==', req.userId)
+            .get();
+
+        const history = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.created_at && data.created_at.toDate) {
+                data.created_at = data.created_at.toDate().toISOString();
+            }
+            history.push({ id: doc.id, ...data });
+        });
+
+        // Sort manually to bypass forced composite index requirement in Firestore
+        history.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        // Cache control
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.json({ history });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/upload', authenticateToken, async (req, res) => {
+    try {
+        if (!req.body || !req.body.receipt) {
+            return res.status(400).json({ error: 'No image data provided.' });
         }
 
         console.log("Processing image with Gemini...");
-
-        // Prepare image for Gemini
-        const filePart = {
-            inlineData: {
-                data: req.file.buffer.toString("base64"),
-                mimeType: req.file.mimetype
-            }
-        };
-
-        const prompt = `
-        Analyze this receipt image and extract the following details into a strict JSON format. Do not use markdown wraps like \`\`\`json. Only output the actual JSON.
-        Expected JSON Schema:
-        {
-            "rawMerchant": "string",
-            "date": "string",
-            "total": number,
-            "category": "string (Categorize it roughly as 'Supermarket / Grocery', 'Food & Beverage', or 'General Retail')",
-            "items": [
-                { "name": "string", "price": number }
-            ]
-        }
-        `;
-
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: [prompt, filePart],
-            config: {
-                responseMimeType: "application/json",
-            }
+            contents: [
+                { text: `Analyze this receipt image and extract the following details into a strict JSON format. If blurry/unreadable return exactly: {"error": "unreadable"}. Otherwise return: {"rawMerchant": "string", "date": "string (YYYY-MM-DD)", "total": number, "category": "string ('Supermarket / Grocery', 'Food & Beverage', or 'General Retail')", "items": [{ "name": "string", "price": number }]}` },
+                { inlineData: { data: req.body.receipt, mimeType: req.body.mimeType || "image/jpeg" } }
+            ],
+            config: { responseMimeType: "application/json" }
         });
 
-        let textResponse = response.text;
-        if (typeof textResponse === 'string') {
-            textResponse = textResponse.trim();
-            if (textResponse.startsWith('```json')) {
-                textResponse = textResponse.replace(/^```json/, '').replace(/```$/, '').trim();
-            } else if (textResponse.startsWith('```')) {
-                textResponse = textResponse.replace(/^```/, '').replace(/```$/, '').trim();
-            }
-        }
-
-        console.log("Raw Gemini Output:", textResponse);
+        let textResponse = response.text || "";
+        textResponse = textResponse.replace(/^```json/, '').replace(/```$/, '').trim();
 
         let receiptData;
         try {
             receiptData = JSON.parse(textResponse);
-        } catch (parseError) {
-            console.error("JSON Parse Error:", parseError, textResponse);
-            return res.status(500).json({ error: "Failed to parse receipt correctly. Raw: " + textResponse });
+        } catch (e) { return res.status(500).json({ error: "Parse failure." }); }
+
+        // FR Compliance: 422 Unprocessable Entity
+        if (receiptData.error === "unreadable") {
+            return res.status(422).json({ error: "Scan Failed: Please ensure the receipt is clear." });
         }
 
-        // Calculate Rewards
         const total = parseFloat(receiptData.total) || 0;
-        const rewardResult = calculateRewards(total, receiptData.category);
 
-        // Update DB
-        db.serialize(() => {
-            db.run(`INSERT INTO Receipts (user_id, merchant, date, total, category, points_earned) VALUES (?, ?, ?, ?, ?, ?)`,
-                [1, receiptData.rawMerchant, receiptData.date, total, receiptData.category, rewardResult.points],
-                function (err) {
-                    if (err) console.error("Error inserting receipt:", err);
-                }
-            );
-            db.run(`UPDATE Users SET total_points = total_points + ? WHERE id = 1`, [rewardResult.points]);
+        // FR Compliance: 409 Conflict checks against real Firestore Database
+        const duplicateCheck = await db.collection('Receipts')
+            .where('user_id', '==', req.userId)
+            .where('merchant', '==', receiptData.rawMerchant)
+            .where('date', '==', receiptData.date)
+            .where('total', '==', total)
+            .get();
+
+        if (!duplicateCheck.empty) {
+            return res.status(409).json({ error: "Duplicate receipt detected. This receipt has already been processed." });
+        }
+
+        // Processing Tier / Multipiler
+        const userRef = await ensureUserExists(req.userId);
+        const userDoc = await userRef.get();
+        const userData = userDoc.data();
+        const rewardResult = calculateRewards(total, receiptData.category, userData.streak || false, userData.tier || "Standard");
+
+        // ---- Phase 2 Schema Database Synchronization ----
+
+        let merchantId = receiptData.rawMerchant.replace(/[^a-zA-Z0-9]/g, '_');
+        if (!merchantId) merchantId = "Unknown";
+
+        // 1. Merchants Upsert
+        const merchantRef = db.collection('Merchants').doc(merchantId);
+        await merchantRef.set({
+            name: receiptData.rawMerchant,
+            normalized_category: receiptData.category,
+            last_seen: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // 2. Receipts
+        const newReceiptRef = db.collection('Receipts').doc();
+        await newReceiptRef.set({
+            user_id: req.userId,
+            merchant: receiptData.rawMerchant,
+            merchant_id: merchantRef.id,
+            date: receiptData.date,
+            total: total,
+            category: receiptData.category,
+            points_earned: rewardResult.points,
+            created_at: admin.firestore.FieldValue.serverTimestamp()
         });
 
-        // Return structured data for the frontend
+        // 3. Receipt Items Batching
+        if (receiptData.items && Array.isArray(receiptData.items)) {
+            const batch = db.batch();
+            receiptData.items.forEach(item => {
+                const itemRef = db.collection('Receipt_Items').doc();
+                batch.set(itemRef, {
+                    receipt_id: newReceiptRef.id,
+                    name: item.name,
+                    price: item.price
+                });
+            });
+            await batch.commit();
+        }
+
+        // 4. Update overall point sum safely
+        await userRef.update({
+            total_points: admin.firestore.FieldValue.increment(rewardResult.points)
+        });
+
+        // 5. Consent Logs (Section 5.4 Privacy Rules)
+        const consentRef = db.collection('Consent_Logs').doc();
+        await consentRef.set({
+            user_id: req.userId,
+            action: "receipt_scan",
+            status: "granted",
+            data_points: ["merchant", "total", "category"],
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // 6. Fraud System Simulation Log
+        const fraudRef = db.collection('Fraud_Scores').doc();
+        await fraudRef.set({
+            receipt_id: newReceiptRef.id,
+            user_id: req.userId,
+            score: 0.05,
+            risk_level: "Low",
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
         res.json({
             success: true,
             data: {
@@ -177,12 +298,8 @@ app.post('/api/upload', upload.single('receipt'), async (req, res) => {
 
     } catch (error) {
         console.error('Error processing upload:', error);
-        res.status(500).json({ error: 'Internal server error processing the receipt.', details: error.message });
+        res.status(500).json({ error: 'Internal server error processing the receipt.' });
     }
 });
 
-// Start server
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-    console.log(`Don't forget to add your GEMINI_API_KEY to the .env file!`);
-});
+app.listen(port, () => console.log(`🚀 Server running dynamically on http://localhost:${port}`));
