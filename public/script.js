@@ -65,6 +65,7 @@ const authSwitchLink = document.getElementById('auth-switch-link');
 const authError = document.getElementById('auth-error');
 const btnLogout = document.getElementById('btn-logout');
 const btnTry = document.getElementById('btn-try');
+const btnGuest = document.getElementById('btn-guest');
 const authModal = document.getElementById('auth-modal');
 const authModalClose = document.getElementById('auth-modal-close');
 const authModalBackdrop = document.getElementById('auth-modal-backdrop');
@@ -757,19 +758,21 @@ async function claimRewardFromCard(card, buttonEl) {
 
 function checkAuth() {
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token || currentUserName === 'Guest Explorer') {
         sectionAuth.classList.add('hidden');
         appContent.classList.remove('hidden');
         btnLogout.classList.remove('hidden');
         btnTry.classList.add('hidden');
+        if (btnGuest) btnGuest.classList.add('hidden');
         closeAuthModal();
         claimAvailablePoints.innerText = totalPoints;
-        fetchTotalPoints();
+        if (token) fetchTotalPoints();
     } else {
         sectionAuth.classList.remove('hidden');
         appContent.classList.add('hidden');
         btnLogout.classList.add('hidden');
         btnTry.classList.remove('hidden');
+        if (btnGuest) btnGuest.classList.remove('hidden');
         currentUserName = 'User';
         closeClaimModal();
         closeClaimSuccessModal();
@@ -887,6 +890,25 @@ function closeAuthModal() {
 }
 
 btnTry.addEventListener('click', () => openAuthModal(true));
+if (btnGuest) {
+    btnGuest.addEventListener('click', async () => {
+        currentUserName = 'Guest Explorer';
+        sectionAuth.classList.add('hidden');
+        appContent.classList.remove('hidden');
+        btnLogout.classList.remove('hidden');
+        btnTry.classList.add('hidden');
+        btnGuest.classList.add('hidden');
+        closeAuthModal();
+
+        // Give guest some points to explore the reward UI
+        totalPoints = 500;
+        totalPointsDisplay.innerText = totalPoints;
+        claimAvailablePoints.innerText = totalPoints;
+
+        await playWelcomeIntro('Guest Explorer');
+        appContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+}
 authModalClose.addEventListener('click', closeAuthModal);
 authModalBackdrop.addEventListener('click', closeAuthModal);
 btnClaimPoints.addEventListener('click', openClaimModal);
@@ -1014,6 +1036,7 @@ btnLogout.addEventListener('click', async () => {
     });
 
     localStorage.removeItem('token');
+    currentUserName = 'User';
     totalPoints = 0;
     totalPointsDisplay.innerText = "0";
     historyTableBody.innerHTML = "";
