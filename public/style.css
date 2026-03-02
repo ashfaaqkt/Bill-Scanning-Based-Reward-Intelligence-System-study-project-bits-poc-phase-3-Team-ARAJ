@@ -2769,8 +2769,16 @@ body::before {
     transform: translateY(-1px);
 }
 
+.mobile-break {
+    display: none;
+}
+
 /* Mobile Responsive Overrides */
 @media (max-width: 768px) {
+    .mobile-break {
+        display: block;
+    }
+
     .landing-hero .hero-title {
         font-size: 2rem;
         white-space: normal;

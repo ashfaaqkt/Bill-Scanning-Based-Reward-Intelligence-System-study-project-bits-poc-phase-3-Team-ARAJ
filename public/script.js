@@ -410,11 +410,13 @@ function initScratchCards() {
 }
 
 async function openClaimModal() {
-    if (!localStorage.getItem('token')) {
+    if (!localStorage.getItem('token') && currentUserName !== 'Guest Explorer') {
         openAuthModal(true);
         return;
     }
-    await fetchTotalPoints();
+    if (localStorage.getItem('token')) {
+        await fetchTotalPoints();
+    }
     renderClaimCards();
     refreshClaimButtonStates();
     claimAvailablePoints.innerText = totalPoints;
@@ -436,7 +438,7 @@ function closeClaimModal() {
 }
 
 async function openClaimedModal() {
-    if (!localStorage.getItem('token')) {
+    if (!localStorage.getItem('token') && currentUserName !== 'Guest Explorer') {
         openAuthModal(true);
         return;
     }
@@ -487,7 +489,7 @@ function closeDigitalBillModal() {
 // --- Analytics Logic ---
 
 async function openAnalyticsModal() {
-    if (!localStorage.getItem('token')) {
+    if (!localStorage.getItem('token') && currentUserName !== 'Guest Explorer') {
         openAuthModal(true);
         return;
     }
@@ -507,8 +509,35 @@ async function loadAnalytics() {
     analyticsContent.classList.add('hidden');
 
     try {
-        const res = await fetch('/api/analytics', { headers: getAuthHeaders() });
-        const data = await res.json();
+        let data = { success: false };
+        let res = null;
+        if (currentUserName === 'Guest Explorer') {
+            await new Promise(r => setTimeout(r, 600)); // Simulate delay
+            data = {
+                success: true,
+                hasData: true,
+                summary: {
+                    totalBills: 12,
+                    totalSpend: 15430,
+                    avgBillValue: 1285.83,
+                    totalPointsEarned: 840,
+                    topCategory: 'Supermarket / Grocery',
+                    topMerchant: 'Big Bazaar'
+                },
+                categories: [
+                    { name: 'Supermarket / Grocery', percentage: 45 },
+                    { name: 'Food & Beverage', percentage: 30 },
+                    { name: 'General Retail', percentage: 25 }
+                ],
+                insights: [
+                    { title: 'Consistent Shopper', text: 'You frequently shop at supermarkets!' },
+                    { title: 'Morning Coffee', text: 'Most of your food & beverage expenses happen before noon.' }
+                ]
+            };
+        } else {
+            res = await fetch('/api/analytics', { headers: getAuthHeaders() });
+            data = await res.json();
+        }
 
         if (!data.success) throw new Error(data.error || 'Failed to fetch analytics');
 
@@ -705,24 +734,36 @@ async function claimRewardFromCard(card, buttonEl) {
     buttonEl.innerText = 'Claiming...';
 
     try {
-        const response = await fetch('/api/claim-reward', {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(payload)
-        });
+        let data = {};
+        if (currentUserName === 'Guest Explorer') {
+            await new Promise(r => setTimeout(r, 800)); // Simulate delay
+            data = {
+                success: true,
+                remainingPoints: totalPoints - payload.requiredPoints,
+                claim: {
+                    claim_code: payload.code
+                }
+            };
+        } else {
+            const response = await fetch('/api/claim-reward', {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload)
+            });
 
-        if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('token');
-            checkAuth();
-            return;
-        }
+            if (response.status === 401 || response.status === 403) {
+                localStorage.removeItem('token');
+                checkAuth();
+                return;
+            }
 
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            buttonEl.disabled = false;
-            buttonEl.innerText = originalText;
-            alert(data.error || 'Unable to claim reward right now.');
-            return;
+            data = await response.json();
+            if (!response.ok || !data.success) {
+                buttonEl.disabled = false;
+                buttonEl.innerText = originalText;
+                alert(data.error || 'Unable to claim reward right now.');
+                return;
+            }
         }
 
         const remaining = Number(data.remainingPoints) || 0;
@@ -734,6 +775,8 @@ async function claimRewardFromCard(card, buttonEl) {
         card.classList.add('claim-card--locked');
         buttonEl.innerText = 'Claimed';
         buttonEl.disabled = true;
+
+        // For guest, add to mock history array locally if we wanted to be perfectly persistent for the session. For simplicity and since fetch overrides, let's just show success
 
         if (payload.type === 'scratch') {
             card.dataset.scratched = 'true';
@@ -805,7 +848,11 @@ function startHeroTyping() {
         }
 
         const char = fullText.charAt(index);
-        heroTypingTitle.textContent += (char === ' ' ? '\u00A0' : char);
+        if (char === '|') {
+            heroTypingTitle.insertAdjacentHTML('beforeend', '<br class="mobile-break">');
+        } else {
+            heroTypingTitle.insertAdjacentText('beforeend', char === ' ' ? '\u00A0' : char);
+        }
         index += 1;
 
         const delay = char === ' ' ? 45 : 45 + Math.floor(Math.random() * 70);
@@ -1162,21 +1209,45 @@ async function handleUpload() {
         const base64String = e.target.result.split(',')[1];
 
         try {
-            const response = await fetch('/api/upload', {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({
-                    receipt: base64String,
-                    mimeType: file.type
-                })
-            });
-
-            const status = response.status;
+            let status = 200;
             let result = {};
-            try {
-                result = await response.json();
-            } catch (jsonErr) {
-                console.warn('Backend did not return valid JSON:', jsonErr);
+
+            if (currentUserName === 'Guest Explorer') {
+                await new Promise(r => setTimeout(r, 2500)); // Simulate processing delay
+                result = {
+                    success: true,
+                    data: {
+                        rawMerchant: 'Demo Supermarket',
+                        date: new Date().toLocaleDateString(),
+                        total: 1250,
+                        category: 'Supermarket / Grocery',
+                        rewardPoints: 50,
+                        rewardLogic: 'Base points (1%) + Grocery Bonus (5 pts)',
+                        receiptId: `MOCK-${Date.now()}`,
+                        items: [
+                            { name: 'Apples 1kg', price: '120.00' },
+                            { name: 'Milk 1L', price: '60.00' },
+                            { name: 'Bread', price: '45.00' },
+                            { name: 'Demo Item 4', price: '1025.00' }
+                        ]
+                    }
+                };
+            } else {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        receipt: base64String,
+                        mimeType: file.type
+                    })
+                });
+
+                status = response.status;
+                try {
+                    result = await response.json();
+                } catch (jsonErr) {
+                    console.warn('Backend did not return valid JSON:', jsonErr);
+                }
             }
 
             if (status === 200 && result.success) {
@@ -1288,13 +1359,27 @@ async function loadScanHistory() {
     historyEmpty.innerText = 'No scan history found yet.';
 
     try {
-        const response = await fetch('/api/history', { headers: getAuthHeaders() });
-        if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('token');
-            checkAuth();
-            return;
+        let data = { history: [] };
+        let res = null;
+
+        if (currentUserName === 'Guest Explorer') {
+            await new Promise(r => setTimeout(r, 600)); // Simulate delay
+            data = {
+                history: [
+                    { id: 'mock-1', created_at: new Date(Date.now() - 86400000).toISOString(), merchant: 'Big Bazaar', category: 'Supermarket / Grocery', total: 1250, points_earned: 50 },
+                    { id: 'mock-2', created_at: new Date(Date.now() - 172800000).toISOString(), merchant: 'Starbucks', category: 'Food & Beverage', total: 450, points_earned: 20 },
+                    { id: 'mock-3', created_at: new Date(Date.now() - 259200000).toISOString(), merchant: 'Reliance Digital', category: 'General Retail', total: 10500, points_earned: 420 },
+                ]
+            };
+        } else {
+            res = await fetch('/api/history', { headers: getAuthHeaders() });
+            if (res.status === 401 || res.status === 403) {
+                localStorage.removeItem('token');
+                checkAuth();
+                return;
+            }
+            data = await res.json();
         }
-        const data = await response.json();
 
         historyLoading.style.display = 'none';
 
@@ -1376,6 +1461,22 @@ historyTableBody.addEventListener('click', async (e) => {
     const originalText = viewBillBtn.innerText;
     viewBillBtn.innerText = 'Loading...';
 
+    const fallbackBill = {
+        merchant: viewBillBtn.dataset.merchant,
+        date: viewBillBtn.dataset.date,
+        category: viewBillBtn.dataset.category,
+        total: Number(viewBillBtn.dataset.total || 0),
+        items: [],
+        reference: receiptId
+    };
+
+    if (currentUserName === 'Guest Explorer') {
+        openDigitalBillModal(fallbackBill);
+        viewBillBtn.disabled = false;
+        viewBillBtn.innerText = originalText;
+        return;
+    }
+
     try {
         const response = await fetch(`/api/receipt/${encodeURIComponent(receiptId)}`, { headers: getAuthHeaders() });
         if (response.status === 401 || response.status === 403) {
@@ -1385,14 +1486,6 @@ historyTableBody.addEventListener('click', async (e) => {
         }
 
         if (!response.ok) {
-            const fallbackBill = {
-                merchant: viewBillBtn.dataset.merchant,
-                date: viewBillBtn.dataset.date,
-                category: viewBillBtn.dataset.category,
-                total: Number(viewBillBtn.dataset.total || 0),
-                items: [],
-                reference: receiptId
-            };
             openDigitalBillModal(fallbackBill);
             return;
         }
@@ -1421,18 +1514,29 @@ async function loadClaimedHistory() {
     claimedTableBody.innerHTML = '';
 
     try {
-        const response = await fetch('/api/claimed-rewards', { headers: getAuthHeaders() });
-        if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('token');
-            checkAuth();
-            return;
+        let claimsData = [];
+        if (currentUserName === 'Guest Explorer') {
+            await new Promise(r => setTimeout(r, 400)); // Simulate delay
+            // Give the guest one mock claimed item if we want
+            claimsData = [
+                { created_at: new Date(Date.now() - 3600000).toISOString(), type: 'voucher', title: 'Domino\'s Voucher', claim_code: '41920381923', required_points: 150 }
+            ]
+        } else {
+            const response = await fetch('/api/claimed-rewards', { headers: getAuthHeaders() });
+            if (response.status === 401 || response.status === 403) {
+                localStorage.removeItem('token');
+                checkAuth();
+                return;
+            }
+
+            const data = await response.json();
+            claimsData = data.claims || [];
         }
 
-        const data = await response.json();
         claimedLoading.style.display = 'none';
 
-        if (data && Array.isArray(data.claims) && data.claims.length > 0) {
-            claimedTableBody.innerHTML = data.claims.map(claim => `
+        if (Array.isArray(claimsData) && claimsData.length > 0) {
+            claimedTableBody.innerHTML = claimsData.map(claim => `
                 <tr class="history-item-row" style="border-bottom: 1px solid #e2e8f0; font-size: 0.9rem;">
                     <td style="padding: 1rem 0.5rem;">${new Date(claim.created_at).toLocaleDateString()}</td>
                     <td style="padding: 1rem 0.5rem;"><span class="tag" style="font-size: 0.75rem;">${claim.type || 'voucher'}</span></td>
