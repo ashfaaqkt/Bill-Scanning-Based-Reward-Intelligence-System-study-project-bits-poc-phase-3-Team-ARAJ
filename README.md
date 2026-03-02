@@ -8,7 +8,7 @@ This application is built as part of our final year study project for the **BSc.
 
 ## 🌟 Live Demo
 Experience the UI demonstration here:
-👉 **[Live Project Demonstration]([https://ashfaaqkt.github.io/Bill-Scanning-Based-Reward-Intelligence-System-study-project-bits-poc-phase-3-Team-ARAJ/](https://ashfaaqkt.com/Bill-Scanning-Based-Reward-Intelligence-System-study-project-bits-poc-phase-3-Team-ARAJ/public/index.html)**
+👉 **[Live Project Demonstration]([https://ashfaaqkt.github.io/Bill-Scanning-Based-Reward-Intelligence-System-study-project-bits-poc-phase-3-Team-ARAJ/](https://ashfaaqkt.com/Bill-Scanning-Based-Reward-Intelligence-System-study-project-bits-poc-phase-3-Team-ARAJ/public/index.html])**
 
 *(Note: Live AI features and database writes are disabled on GitHub Pages. See the instructions below to run the complete AI setup locally).*
 
