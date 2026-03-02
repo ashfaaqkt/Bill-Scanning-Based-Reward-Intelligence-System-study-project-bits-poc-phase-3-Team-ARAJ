@@ -2768,3 +2768,21 @@ body::before {
     box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
     transform: translateY(-1px);
 }
+
+/* Mobile Responsive Overrides */
+@media (max-width: 768px) {
+    .navbar .brand-text {
+        display: none !important;
+    }
+    .navbar-actions .btn-text, .btn-logout .btn-text {
+        display: none !important;
+    }
+    .navbar .navbar-actions .btn {
+        padding: 0 0.8rem;
+    }
+    .footer .footer-content {
+        justify-content: center !important;
+        flex-direction: column !important;
+        text-align: center !important;
+    }
+}
