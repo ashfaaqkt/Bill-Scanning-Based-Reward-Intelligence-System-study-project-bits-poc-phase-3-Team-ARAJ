@@ -257,7 +257,8 @@ body::before {
     box-shadow: 0 8px 24px rgba(234, 88, 12, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
-.navbar .navbar-actions .btn.btn-github-icon::after {
+.navbar .navbar-actions .btn.btn-github-icon::after,
+.navbar .navbar-actions .btn.btn-brochure::after {
     content: attr(data-tooltip);
     position: absolute;
     left: 50%;
@@ -278,7 +279,8 @@ body::before {
     z-index: 15;
 }
 
-.navbar .navbar-actions .btn.btn-github-icon::before {
+.navbar .navbar-actions .btn.btn-github-icon::before,
+.navbar .navbar-actions .btn.btn-brochure::before {
     content: '';
     position: absolute;
     left: 50%;
@@ -298,12 +300,18 @@ body::before {
 .navbar .navbar-actions .btn.btn-github-icon:hover::after,
 .navbar .navbar-actions .btn.btn-github-icon:hover::before,
 .navbar .navbar-actions .btn.btn-github-icon:focus-visible::after,
-.navbar .navbar-actions .btn.btn-github-icon:focus-visible::before {
+.navbar .navbar-actions .btn.btn-github-icon:focus-visible::before,
+.navbar .navbar-actions .btn.btn-brochure:hover::after,
+.navbar .navbar-actions .btn.btn-brochure:hover::before,
+.navbar .navbar-actions .btn.btn-brochure:focus-visible::after,
+.navbar .navbar-actions .btn.btn-brochure:focus-visible::before {
     opacity: 1;
 }
 
 .navbar .navbar-actions .btn.btn-github-icon:hover::after,
-.navbar .navbar-actions .btn.btn-github-icon:focus-visible::after {
+.navbar .navbar-actions .btn.btn-github-icon:focus-visible::after,
+.navbar .navbar-actions .btn.btn-brochure:hover::after,
+.navbar .navbar-actions .btn.btn-brochure:focus-visible::after {
     transform: translateX(-50%) translateY(0);
 }
 
