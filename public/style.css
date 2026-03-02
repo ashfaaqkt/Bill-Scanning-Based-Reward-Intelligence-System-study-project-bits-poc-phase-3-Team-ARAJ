@@ -2467,6 +2467,8 @@ body::before {
     font-size: 1.25rem;
     color: #1e293b;
     font-weight: 700;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 /* Chart Shell */
