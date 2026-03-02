@@ -1879,6 +1879,14 @@ body::before {
     flex: 1;
     border-top: 1px solid rgba(30, 41, 59, 0.08);
     padding-top: 0.35rem;
+    max-height: 300px;
+}
+
+.claimed-table-wrap .history-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(165deg, rgba(228, 235, 244, 0.95), rgba(242, 246, 250, 0.95));
 }
 
 .claimed-code-cell {
