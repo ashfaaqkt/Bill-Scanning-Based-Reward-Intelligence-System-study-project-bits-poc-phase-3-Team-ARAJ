@@ -2771,15 +2771,25 @@ body::before {
 
 /* Mobile Responsive Overrides */
 @media (max-width: 768px) {
+    .landing-hero .hero-title {
+        font-size: 2rem;
+        white-space: normal;
+        word-wrap: break-word;
+    }
+
     .navbar .brand-text {
         display: none !important;
     }
-    .navbar-actions .btn-text, .btn-logout .btn-text {
+
+    .navbar-actions .btn-text,
+    .btn-logout .btn-text {
         display: none !important;
     }
+
     .navbar .navbar-actions .btn {
         padding: 0 0.8rem;
     }
+
     .footer .footer-content {
         justify-content: center !important;
         flex-direction: column !important;
