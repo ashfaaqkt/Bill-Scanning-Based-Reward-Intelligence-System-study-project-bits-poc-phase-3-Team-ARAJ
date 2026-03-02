@@ -97,8 +97,8 @@ npm start
 *   **Automated Validation & Blur Detection**: Built-in AI checks accurately identify blurry or unreadable formats and seamlessly prompt the user for a clearer image via a custom 422 Unprocessable Entity error modal.
 *   **Intelligent Duplicate Detection**: Real-time HTTP integrations with the backend Firestore database automatically check for duplicate scans (matching merchant, date, and exact total) and return custom 409 Conflict messages.
 *   **Robust HTTP Integrations**: Seamless REST API communication leveraging Express.js, protected by mock JWT Authentication and robust error-handling pipelines (including Google API rate limits handling).
-*   **Tiered Reward Logic**: Points and multipliers assigned dynamically based on the normalized categories extracted individually from the uploaded bills.
 *   **Intelligent Analytics**: AI-driven mock insights derived from spending patterns.
+*   **Explore as Guest Mode**: A fully functional frontend clone of the authentication flow that uses pre-configured mock data. This allows users to test the receipt upload animations, dynamic reward dashboard, scan history, and analytics UI seamlessly without needing a backend server or database setup.
 
 ---
 
